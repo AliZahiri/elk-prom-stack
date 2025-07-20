@@ -1,0 +1,6 @@
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.serviceAccountToken: "__REPLACE_ME__"
+
+xpack.security.encryptionKey: "__REPLACE_ME__"
+xpack.encryptedSavedObjects.encryptionKey: "__REPLACE_ME__"
+xpack.reporting.encryptionKey: "__REPLACE_ME__"
