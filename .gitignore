@@ -1,0 +1,20 @@
+#########################################################
+.env
+# Ignore local ELK and Monitoring configuration and data
+elk/
+monitoring/
+
+# ...except sample config files
+!elk/kibana/kibana.yml.sample
+!monitoring/alertmanager.yml.sample
+!monitoring/config.monitoring.sample
+
+# Ignore common temp files
+*.log
+*.tmp
+*.swp
+
+# Optional: ignore Docker volumes (if mounted locally)
+**/data/
+**/logs/
+#########################################################
