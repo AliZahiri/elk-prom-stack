@@ -90,4 +90,7 @@ docker compose up -d
 echo "🔁 Restarting Kibana to apply config..."
 docker compose restart kibana
 
+# Installing Filebeat service 
+bash ./elk/install-filebeat.sh
+
 echo "✅ All done!"
