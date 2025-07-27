@@ -1,0 +1,86 @@
+#!/bin/bash
+set -e
+
+echo "📦 Installing Filebeat..."
+
+# Import Elastic GPG key
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo apt-key add -
+
+# Add Elastic APT repo
+sudo apt-get install -y apt-transport-https
+echo "deb https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
+
+# Update and install Filebeat
+sudo apt-get update
+sudo apt-get install -y filebeat
+
+echo "✅ Filebeat installed."
+
+# Load credentials from .env file
+if [ -f ../.env ]; then
+  export $(grep -v '^#' ../.env | xargs)
+else
+  echo "❌ ../.env file not found!"
+  exit 1
+fi
+
+echo "🔐 Creating Filebeat user and role..."
+
+# Create filebeat_writer role (if not exists)
+curl -u "$ELASTIC_USER:$ELASTIC_PASS" -X PUT http://localhost:9200/_security/role/filebeat_writer \
+  -H "Content-Type: application/json" -d '{
+  "cluster": ["monitor", "manage_index_templates"],
+  "indices": [
+    {
+      "names": [ "dev-*-*" ],
+      "privileges": ["create_index", "write", "create", "view_index_metadata"]
+    }
+  ]
+}'
+
+# Create filebeat user
+curl -u "$ELASTIC_USER:$ELASTIC_PASS" -X POST http://localhost:9200/_security/user/filebeat_user \
+  -H "Content-Type: application/json" -d "{
+  \"password\": \"${FILEBEAT_PASS}\",
+  \"roles\": [\"filebeat_writer\"],
+  \"full_name\": \"Filebeat Agent\"
+}" || echo "⚠ User may already exist"
+
+# Disable default modules
+sudo filebeat modules disable system || true
+
+# Create Filebeat config
+echo "📝 Writing Filebeat config..."
+
+sudo tee /etc/filebeat/filebeat.yml > /dev/null <<EOF
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /opt/*/logs/*.log
+    fields:
+      env: "dev"
+    fields_under_root: true
+    multiline.pattern: '^\\d{4}-\\d{2}-\\d{2}'
+    multiline.negate: true
+    multiline.match: after
+
+processors:
+  - dissect:
+      tokenizer: "/opt/%{app}/logs/%{}"
+      field: "source"
+      target_prefix: ""
+
+output.elasticsearch:
+  hosts: ["http://localhost:9200"]
+  username: "filebeat_user"
+  password: "${FILEBEAT_PASS}"
+  index: "%{[env]}-%{[app]}-%{+yyyy.MM.dd}"
+EOF
+
+echo "🔄 Restarting and enabling Filebeat..."
+sudo systemctl enable filebeat
+sudo systemctl restart filebeat
+
+echo "✅ Filebeat is running and set to collect logs from /opt/*/logs/*.log"
+
