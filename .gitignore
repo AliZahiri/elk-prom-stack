@@ -6,7 +6,10 @@ monitoring/*
 
 # ...except sample config files
 !elk/*.sample
+!elk/install-filebeat.sh
 !monitoring/*.sample
+!monitoring/rules/
+!monitoring/rules/*.sample
 
 # Ignore common temp files
 *.log

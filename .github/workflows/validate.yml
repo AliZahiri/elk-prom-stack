@@ -1,0 +1,29 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: bash -n runIT.sh elk/install-filebeat.sh elk/install-filebeat.sh.sample
+
+      - name: Prepare local sample configuration
+        run: |
+          cp .env.sample .env
+          cp monitoring/config.monitoring.sample monitoring/config.monitoring
+          cp monitoring/prometheus.yml.sample monitoring/prometheus.yml
+          cp monitoring/alertmanager.yml.sample monitoring/alertmanager.yml
+          mkdir -p monitoring/rules
+          for sample in monitoring/rules/*.sample; do cp "$sample" "${sample%.sample}"; done
+
+      - name: Render Compose model
+        run: docker compose --env-file .env config --quiet
