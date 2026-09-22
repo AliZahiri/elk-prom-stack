@@ -1,86 +1,95 @@
-# DevOps Docker Stack
+# ELK and Prometheus Observability Stack
 
-This project sets up a local monitoring and observability stack using:
+A Docker Compose lab for collecting host metrics and application logs with Elasticsearch, Kibana, Prometheus, Grafana, Alertmanager, and Node Exporter.
 
-- **Elasticsearch**
-- **Kibana**
-- **Prometheus**
-- **Grafana**
-- **Alertmanager**
-- **Node Exporter**
+This repository is designed for local or isolated development environments. It is not a production-ready observability platform: authentication, TLS, network exposure, storage sizing, backups, upgrades, and alert delivery still require environment-specific engineering.
 
----
+## Architecture
 
-## 🚀 How to Run
+```text
+host metrics ──> Node Exporter ──> Prometheus ──> Grafana
+                                      │              │
+                                      └──────────────> Alertmanager
 
-### 1. Create your `.env` file
-
-Before anything, copy the sample file and customize your credentials:
-
-```bash
-cp .env.sample .env
+application logs ──> optional Filebeat ──> Elasticsearch ──> Kibana
 ```
 
-Update the `.env` file with your desired credentials (e.g., `ELASTIC_USER`, `ELASTIC_PASS`).
+The Compose network is named `svc`. Elasticsearch and Kibana use the same pinned minor version. Prometheus and Grafana provide the metrics path; Filebeat is an explicit opt-in because installation changes the host package state.
 
-### 2. Optional: Configure Grafana admin user
+See [docs/architecture.md](docs/architecture.md) for service ownership, data paths, and startup flow. See [docs/security.md](docs/security.md) before exposing any port beyond localhost.
 
-```bash
-cp monitoring/config.monitoring.sample monitoring/config.monitoring
-```
+## Requirements
 
-Update the file with your Grafana admin credentials.
+- Linux host with Docker Engine and Docker Compose v2
+- Root access for the current bootstrap script because it creates `/opt/elk` and `/opt/monitoring` bind-mount directories
+- At least 4 GiB available to Elasticsearch, plus storage for persistent metrics and logs
+- `curl` and `openssl` on the host
 
-### 3. Run the stack
+## Quick start
 
-Use the provided setup script:
+1. Create local credentials from the tracked template and replace every placeholder:
 
-```bash
-chmod +x runIT.sh
-./runIT.sh
-```
+   ```bash
+   cp .env.sample .env
+   $EDITOR .env
+   ```
 
-This script will:
+2. Review the local Grafana and Alertmanager samples. The bootstrap copies them to ignored runtime files when they do not exist.
 
-- Create required local folders and volume files
-- Spin up the services using Docker Compose
-- Wait for Elasticsearch to be ready
-- Generate and inject Kibana service token and encryption keys
-- Restart Kibana to apply configuration
+3. Start the stack from the repository directory:
 
----
+   ```bash
+   chmod +x runIT.sh
+   sudo ./runIT.sh
+   ```
 
-## 📁 Volume Directories
+   The script creates runtime configuration from the `*.sample` files, starts Elasticsearch first, waits up to three minutes for readiness, generates Kibana encryption keys and a service token, and then starts the remaining services.
 
-Data will be stored in the following directories on your local system:
+4. Open the local endpoints:
 
-- `/opt/elk/elasticsearch`
-- `/opt/elk/kibana`
-- `/opt/monitoring/prometheus`
-- `/opt/monitoring/grafana`
+   | Service | URL |
+   | --- | --- |
+   | Elasticsearch | `http://localhost:9200` |
+   | Kibana | `http://localhost:5601` |
+   | Prometheus | `http://localhost:9090` |
+   | Grafana | `http://localhost:3000` |
+   | Alertmanager | `http://localhost:9093` |
 
-These are bind-mounted for persistence.
+Filebeat is skipped by default. To opt in on a Debian/Ubuntu host, set `INSTALL_FILEBEAT=true` and provide `FILEBEAT_PASS` in `.env`, then rerun the bootstrap. The installer uses `sudo apt` and should be reviewed before execution.
 
----
+## Runtime files and storage
 
-## ⚠️ Do Not Commit
-
-Make sure these files are **not committed to Git**:
+The following generated files are intentionally ignored:
 
 - `.env`
+- `elk/kibana.yml`
 - `monitoring/config.monitoring`
-- Any files in `elk/` or `monitoring/` (except `.sample` files)
+- `monitoring/prometheus.yml`
+- `monitoring/alertmanager.yml`
+- `monitoring/rules/*.yml`
 
-Already handled via `.gitignore`.
+Persistent bind mounts are created under `/opt/elk` and `/opt/monitoring`. Do not delete them as part of routine shutdown. Use `docker compose down` to stop services; remove data only as an explicit, reviewed maintenance action.
 
----
+## Validation
 
-## 🛑 To Stop
+The repository includes an offline GitHub Actions workflow that checks shell syntax and renders the Compose model using generated local sample files. Run the same checks locally with:
 
 ```bash
-docker compose down -v
+bash -n runIT.sh elk/install-filebeat.sh elk/install-filebeat.sh.sample
+cp .env.sample .env
+cp monitoring/config.monitoring.sample monitoring/config.monitoring
+cp monitoring/prometheus.yml.sample monitoring/prometheus.yml
+cp monitoring/alertmanager.yml.sample monitoring/alertmanager.yml
+mkdir -p monitoring/rules
+for sample in monitoring/rules/*.sample; do cp "$sample" "${sample%.sample}"; done
+docker compose --env-file .env config --quiet
 ```
 
----
+Do not commit the generated runtime files or real credentials.
 
-Feel free to customize or expand this setup!
+## Limitations
+
+- Compose publishes service ports on all host interfaces unless the port bindings are changed to `127.0.0.1`.
+- The sample stack uses HTTP inside the local Docker network; TLS and an authenticated ingress are required for shared or production environments.
+- The sample Alertmanager configuration contains placeholder SMTP values and is not a delivery-ready alert route.
+- Images are not all pinned by digest; review and pin image references before using this as a controlled deployment input.

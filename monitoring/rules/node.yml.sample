@@ -1,0 +1,10 @@
+groups:
+  - name: node-baseline
+    rules:
+      - alert: NodeExporterTargetDown
+        expr: up{job="node-exporter"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Node Exporter target is unavailable
